@@ -1,0 +1,20 @@
+# secrets / local config
+.env
+
+# python
+.venv/
+.venv-dgx/
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# build & test artifacts
+dist/
+.pytest_cache/
+
+# local runtime data (SQLite DB, cycle artifacts)
+.driftlab/
+
+# macOS
+.DS_Store

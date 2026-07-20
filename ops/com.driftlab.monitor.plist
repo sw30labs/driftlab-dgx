@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS launchd template (optional). On DGX Spark / Linux prefer ops/crontab.txt
+  or a systemd user timer instead.
+
+  Install on a Mac:
+    cp ops/com.driftlab.monitor.plist ~/Library/LaunchAgents/
+    # edit WorkingDirectory / ProgramArguments paths
+    launchctl load ~/Library/LaunchAgents/com.driftlab.monitor.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.driftlab.monitor</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd $HOME/Desktop/driftlab-dgx &amp;&amp; .venv/bin/driftlab monitor run --scheduled &gt;&gt; $HOME/.driftlab/monitor.log 2&gt;&amp;1</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>

@@ -1,0 +1,5 @@
+# DriftLab monitor — cron template (every hour; staleness policy decides what runs)
+# Edit paths to match your install, then: crontab -e  (paste the line below)
+#
+# DGX Spark / Linux example:
+0 * * * * cd $HOME/Desktop/driftlab-dgx && .venv/bin/driftlab monitor run --scheduled >> $HOME/.driftlab/monitor.log 2>&1

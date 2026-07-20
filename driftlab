@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Thin DGX-friendly launcher (mirrors articlebuddy / bookbuddy / greyswan UX).
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "${ROOT}"
+
+PYTHON="${DRIFTLAB_PYTHON:-}"
+if [[ -z "${PYTHON}" ]]; then
+  if [[ -x "${ROOT}/.venv/bin/python" ]]; then
+    PYTHON="${ROOT}/.venv/bin/python"
+  elif [[ -x "${ROOT}/.venv-dgx/bin/python" ]]; then
+    PYTHON="${ROOT}/.venv-dgx/bin/python"
+  elif command -v python3.12 >/dev/null 2>&1; then
+    PYTHON="python3.12"
+  else
+    PYTHON="python3"
+  fi
+fi
+
+export PATH="${ROOT}/.venv/bin:${ROOT}/.venv-dgx/bin:${PATH}"
+export PYTHONPATH="${ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}"
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") <command> [args...]
+
+Commands:
+  install | setup      Create .venv and install package + LLM extras
+  doctor               Host + seed + optional vLLM health
+  test-vllm            Catalog + tiny completion against local vLLM
+  demo                 Full E2E on the bundled seed estate
+  agents               Show monitored estate
+  check --agent NAME   One compliance cycle, now
+  monitor run|status   Staleness-weighted estate cycle / recent runs
+  report <cycle_id>    Print a cycle's markdown report
+  dashboard            Serve estate UI (default http://127.0.0.1:8321)
+  pytest [args...]     Run tests
+  help                 This help
+
+Examples:
+  ./driftlab install
+  ./driftlab doctor
+  ./driftlab demo
+  ./driftlab check --agent loan-officer
+  ./driftlab dashboard --port 8321
+  ./driftlab test-vllm
+
+Environment:
+  DRIFTLAB_PYTHON   Python binary (default: .venv/bin/python or python3.12)
+  See .env.example for DRIFTLAB_* / VLLM_* settings.
+EOF
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 0
+fi
+
+cmd="${1:-help}"
+shift || true
+
+case "${cmd}" in
+  -h|--help|help)
+    usage
+    ;;
+  install|setup)
+    exec bash "${ROOT}/setup-venv.sh" "$@"
+    ;;
+  pytest|test)
+    if [[ ! -x "${ROOT}/.venv/bin/python" && ! -x "${ROOT}/.venv-dgx/bin/python" ]]; then
+      echo "error: no venv — run ./driftlab install first" >&2
+      exit 1
+    fi
+    exec "${PYTHON}" -m pytest "$@"
+    ;;
+  doctor|test-vllm|demo|agents|check|monitor|report|dashboard)
+    exec "${PYTHON}" -m driftlab.cli "${cmd}" "$@"
+    ;;
+  *)
+    # Pass through any other Typer subcommand / args.
+    exec "${PYTHON}" -m driftlab.cli "${cmd}" "$@"
+    ;;
+esac
