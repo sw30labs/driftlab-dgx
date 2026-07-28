@@ -28,6 +28,10 @@ _KIND_BY_KEY = {
     "error": EventKind.ERROR,
     "hitl": EventKind.HITL,
     "human_review": EventKind.HITL,
+    # Legacy estate emitters (soc-ir, article-buddy event_type vocabulary)
+    "node_enter": EventKind.ROUTE,
+    "node_exit": EventKind.ROUTE,
+    "output_commit": EventKind.TOOL_CALL,
 }
 
 
@@ -41,7 +45,7 @@ def normalize_record(agent: str, seq: int, raw: dict[str, Any]) -> DecisionEvent
     Raises :class:`NormalizationError` if the record shape is unrecognized or
     missing required fields — evidence must never be silently dropped.
     """
-    kind_raw = str(raw.get("kind", raw.get("type", ""))).lower()
+    kind_raw = str(raw.get("kind") or raw.get("type") or raw.get("event_type") or "").lower()
     kind = _KIND_BY_KEY.get(kind_raw)
     if kind is None:
         raise NormalizationError(
@@ -52,14 +56,22 @@ def normalize_record(agent: str, seq: int, raw: dict[str, Any]) -> DecisionEvent
     if node is None:
         raise NormalizationError(f"event at seq {seq} missing required 'node'")
 
+    tool = raw.get("tool")
+    if tool is None and kind_raw == "output_commit":
+        tool = "output_commit"  # surface the commit action to tool checks
+
+    route_to = raw.get("route_to") or raw.get("to") or raw.get("target")
+    if route_to is None and kind_raw in ("node_enter", "node_exit"):
+        route_to = node  # entering/exiting a node is a transition involving it
+
     event = DecisionEvent(
         agent=agent,
         seq=seq,
         kind=kind,
         node=str(node),
-        tool=raw.get("tool"),
+        tool=tool,
         route_from=raw.get("route_from") or raw.get("from"),
-        route_to=raw.get("route_to") or raw.get("to"),
+        route_to=route_to,
         amount=_coerce_float(raw.get("amount")),
         payload={k: v for k, v in raw.items() if k not in _RESERVED},
     )
@@ -69,12 +81,14 @@ def normalize_record(agent: str, seq: int, raw: dict[str, Any]) -> DecisionEvent
 _RESERVED = {
     "kind",
     "type",
+    "event_type",
     "node",
     "tool",
     "route_from",
     "from",
     "route_to",
     "to",
+    "target",
     "amount",
     "agent",
     "seq",
@@ -111,4 +125,11 @@ def load_jsonl(path: str | Path, agent: str | None = None) -> list[DecisionEvent
                 continue
             raws.append(json.loads(line))
     agent_name = agent or p.stem
+    if agent is not None:
+        # Shared trace files (several agents, one stream): judge each agent on
+        # its own records. Ownerless records belong to every reader.
+        raws = [
+            r for r in raws
+            if (r.get("agent_id") or r.get("agent")) in (None, "", agent)
+        ]
     return normalize_stream(agent_name, raws)

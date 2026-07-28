@@ -85,3 +85,33 @@ def test_compile_fail_closed_on_duplicate_resource_currency():
     profile.props.append({"name": "dl:resource-budget", "value": "tokens|99"})
     with pytest.raises(CompileError):
         BaselineCompiler().compile(profile)
+
+def test_normalize_legacy_event_type_aliases():
+    ev = normalize_record("a", 0, {"event_type": "node_enter", "node": "pipeline_start"})
+    assert ev.kind.value == "route"
+    assert ev.route_to == "pipeline_start"
+
+    ev = normalize_record("a", 1, {"event_type": "output_commit", "node": "publish"})
+    assert ev.kind.value == "tool_call"
+    assert ev.tool == "output_commit"
+
+    ev = normalize_record("a", 2, {"event_type": "route", "node": "select", "target": "respond"})
+    assert ev.kind.value == "route"
+    assert ev.route_to == "respond"
+
+
+def test_normalize_legacy_unknown_kind_still_raises():
+    with pytest.raises(NormalizationError):
+        normalize_record("a", 0, {"event_type": "teleport", "node": "x"})
+
+
+def test_load_jsonl_filters_shared_trace_by_agent(tmp_path):
+    trace = tmp_path / "shared.jsonl"
+    trace.write_text(
+        '{"agent_id": "a1", "event_type": "route", "node": "n1"}\n'
+        '{"agent_id": "a2", "event_type": "tool_call", "node": "n2", "tool": "t"}\n'
+        '{"event_type": "route", "node": "shared"}\n'
+    )
+    assert [e.node for e in load_jsonl(trace, "a1")] == ["n1", "shared"]
+    assert [e.node for e in load_jsonl(trace, "a2")] == ["n2", "shared"]
+    assert len(load_jsonl(trace)) == 3  # no agent requested -> whole stream
